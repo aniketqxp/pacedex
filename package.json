@@ -1,0 +1,22 @@
+{
+  "name": "pacedex",
+  "version": "1.0.0",
+  "description": "Weekly Claude Code and Codex usage as rings on your iPhone, from a Cloudflare Worker you own.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "author": "Aniket Shinde",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "deploy": "wrangler deploy",
+    "test": "node --test",
+    "check": "node --check src/worker.js && node --check scripts/setup.mjs && node --check scripts/relay.mjs && node --test"
+  },
+  "devDependencies": {
+    "qrcode": "^1.5.4",
+    "wrangler": "^4.156.0"
+  }
+}

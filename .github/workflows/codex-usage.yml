@@ -1,0 +1,23 @@
+name: codex-usage-relay
+
+on:
+  schedule:
+    # Every 30 min keeps a private repo under the 2,000 free Actions minutes/month.
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+jobs:
+  relay:
+    # The template repo has no Worker to relay to; copies made from it aren't templates.
+    if: ${{ !github.event.repository.is_template }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/relay.mjs
+        env:
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          RELAY_KEY: ${{ secrets.RELAY_KEY }}

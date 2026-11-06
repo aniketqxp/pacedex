@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pacedex</title>
+<meta name="description" content="Weekly Claude Code and Codex usage at a glance.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pacedex">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  /* Geist by Vercel (SIL OFL). */
+  @font-face {
+    font-family: "Geist";
+    src: url("/fonts/geist.woff2") format("woff2");
+    font-weight: 100 900; font-display: swap;
+  }
+  :root {
+    --bg: #000; --line: rgba(255,255,255,.08); --fill: rgba(255,255,255,.06);
+    --text: #F5F5F7; --muted: #8A8A90; --live: #32D74B; --warn: #FF9F0A;
+    --claude: #D97757; --claude-track: rgba(217,119,87,.24);
+    --codex-a: #B1A7FF; --codex-b: #7A9DFF; --codex-c: #3941FF; --codex-track: rgba(122,157,255,.32);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 16px/1.4 "Geist", -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body.sheet-open { overflow: hidden; }
+  main { max-width: 440px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column;
+    padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px); }
+  svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--codex-b); outline-offset: 2px; }
+
+  /* Glass: a translucent, blurred surface with a lit top edge. It only reads
+     as glass over something, which is why the rings carry a soft color glow. */
+  .glass { background: rgba(40,40,46,.42); border: 1px solid rgba(255,255,255,.10);
+    -webkit-backdrop-filter: blur(28px) saturate(180%); backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 0 rgba(255,255,255,.04), 0 12px 40px rgba(0,0,0,.45); }
+
+  header { display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 0; }
+  h1 { font-size: 32px; font-weight: 650; letter-spacing: -0.035em; margin: 0; }
+  .tool { width: 42px; height: 42px; border-radius: 50%; color: var(--text); display: grid; place-items: center;
+    padding: 0; cursor: pointer; }
+  #settings { background: none; border: 0; color: var(--muted); margin-right: -8px; }
+
+  /* Meters: two rings sharing the screen, no boxes around them. */
+  #meters.open { flex: 1; display: grid; align-content: space-evenly; justify-items: center; gap: 28px; padding: 20px 0; }
+  .meter { display: grid; justify-items: center; gap: 14px; }
+  .ring { position: relative; isolation: isolate; width: 220px; height: 220px; }
+  .ring::before { content: ""; position: absolute; inset: -40px; border-radius: 50%; z-index: -1;
+    background: radial-gradient(closest-side, var(--aura), transparent); opacity: .22; }
+  .ring > svg { width: 100%; height: 100%; overflow: visible; }
+  .ring .fill { transition: stroke-dasharray 1.1s cubic-bezier(.2,.8,.2,1); }
+  .ring .inside { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 4px; }
+  .ring .inside svg { width: 34px; height: 34px; }
+  .pct { font-size: 60px; font-weight: 600; line-height: 1; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+  /* The number's tight tracking also pulls in the sign, so this margin offsets it. */
+  .pct small { font-size: 24px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+  /* Tapping a ring swaps the number for when it resets, for a few seconds. */
+  .meter[data-reset] .ring { cursor: pointer; }
+  .when { display: none; justify-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+  .when b { font-size: 40px; font-weight: 600; line-height: 1; letter-spacing: -0.04em; }
+  .when span { font-size: 15px; font-weight: 500; color: var(--muted); }
+  .meter.flip .pct { display: none; }
+  .meter.flip .when { display: grid; }
+  /* The 5-hour window, as a bar under the ring. */
+  .session { width: 220px; display: grid; gap: 6px; }
+  .session svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .session div { display: flex; justify-content: space-between; font-size: 13px; font-weight: 500; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .session b { color: var(--text); font-weight: 600; margin-right: 4px; }
+  /* Shown only when something needs attention; otherwise the data is current. */
+  .alert { display: flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 500;
+    color: var(--warn); background: none; border: 0; padding: 0; }
+  .alert::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  button.alert { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Buttons & forms */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0;
+    border-radius: 14px; padding: 14px; margin-top: 12px; font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--text); color: #000; }
+  .btn.quiet { background: rgba(255,255,255,.10); color: var(--text); }
+  .btn.small { width: auto; padding: 9px 14px; font-size: 14px; border-radius: 12px; margin-top: 0; }
+  .btn.danger { color: #FF6961; }
+  input { width: 100%; background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px; font: inherit; margin-top: 12px; }
+
+  /* Views */
+  .view { display: none; }
+  .view.open { display: block; }
+  .panel { background: var(--fill); border-radius: 22px; padding: 18px; margin-bottom: 10px; }
+  .panel-head { display: flex; align-items: center; gap: 12px; }
+  .tile { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; flex: none; }
+  .tile svg { width: 24px; height: 24px; }
+  .tile.claude { background: var(--claude-track); }
+  .tile.codex { background: var(--codex-track); }
+  .panel-head h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .status { margin-left: auto; display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 500; color: var(--muted); }
+  .status.ok { color: var(--live); }
+  .status.bad { color: var(--warn); }
+  .status svg.i { width: 16px; height: 16px; stroke-width: 2.5; }
+  .actions { display: flex; gap: 8px; margin-top: 14px; }
+  .panel p { color: var(--muted); font-size: 15px; margin: 12px 0 0; }
+  .panel a { color: var(--text); }
+  .panel a.btn { color: #000; text-decoration: none; }
+  .panel b { color: var(--text); font-weight: 600; }
+  .tile img { width: 40px; height: 40px; border-radius: 11px; }
+  .devcode { font-size: 34px; font-weight: 600; letter-spacing: .06em; text-align: center; margin: 14px 0 2px;
+    font-variant-numeric: tabular-nums; }
+  .textbtn { display: block; margin: 16px auto 4px; background: none; border: 0; color: var(--muted); font: inherit;
+    font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .welcome { text-align: center; padding: 48px 8px 12px; }
+  .welcome img { width: 88px; height: 88px; border-radius: 20px; }
+  .welcome h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 18px 0 6px; }
+  .welcome p { color: var(--muted); margin: 0 0 8px; }
+
+  /* Settings: a glass sheet that rises over the rings. */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.25); opacity: 0; pointer-events: none;
+    transition: opacity .3s; z-index: 1; }
+  .sheet { position: fixed; left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom) + 8px); z-index: 2;
+    max-width: 440px; margin: 0 auto; max-height: calc(100dvh - env(safe-area-inset-top) - 40px); overflow-y: auto;
+    border-radius: 34px; padding: 18px 14px 12px; visibility: hidden;
+    /* Clears the bottom inset too, or the sheet's lit edge peeks above the home indicator. */
+    transform: translateY(calc(100% + env(safe-area-inset-bottom) + 60px));
+    transition: transform .42s cubic-bezier(.32,.72,0,1), visibility 0s .42s; }
+  .sheet-open .scrim { opacity: 1; pointer-events: auto; }
+  .sheet-open .sheet { transform: none; visibility: visible; transition: transform .42s cubic-bezier(.32,.72,0,1); }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 14px; }
+  .sheet-head h2 { font-size: 22px; font-weight: 650; letter-spacing: -0.03em; margin: 0; }
+  .sheet-head .tool { width: 36px; height: 36px; background: rgba(255,255,255,.10); border: 0; }
+
+  /* Notification switches, in the iOS shape people already know. */
+  .tile.plain { background: rgba(255,255,255,.10); color: var(--text); }
+  .switches { margin-top: 14px; border-radius: 16px; background: rgba(0,0,0,.25); }
+  .switch { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+  .switch + .switch { border-top: 1px solid var(--line); }
+  .switch > span { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; }
+  .switch > span svg { width: 20px; height: 20px; flex: none; }
+  .switch small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; margin-top: 2px; }
+  .switch input { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 51px; height: 31px;
+    margin: 0; padding: 0; border: 0; border-radius: 16px; background: rgba(120,120,128,.32); cursor: pointer;
+    transition: background .2s; }
+  .switch input::before { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
+    background: #fff; box-shadow: 0 3px 8px rgba(0,0,0,.18); transition: transform .2s; }
+  .switch input:checked { background: var(--live); }
+  .switch input:checked::before { transform: translateX(20px); }
+  .panel p.fine { font-size: 13px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ring .fill, .sheet, .scrim, .switch input, .switch input::before { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Pacedex</h1>
+    <button class="tool" id="settings" aria-label="Settings"></button>
+  </header>
+
+  <section class="view" id="keyView">
+    <div class="welcome">
+      <img src="/icon-192.png" alt="">
+      <h2>Enter your access key</h2>
+      <p>Setup printed a link that fills this in. The key is also in .secrets.local on your computer.</p>
+    </div>
+    <div class="panel">
+      <input id="keyInput" type="password" autocomplete="off" placeholder="Access key" aria-label="Access key">
+      <button class="btn" id="keySave">Unlock</button>
+    </div>
+  </section>
+
+  <section class="view" id="meters" aria-live="polite"></section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<section class="sheet glass" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" inert>
+  <div class="sheet-head">
+    <h2 id="sheetTitle">Settings</h2>
+    <button class="tool" id="sheetClose" aria-label="Done"></button>
+  </div>
+  <div class="panel" data-provider="claude">
+    <div class="panel-head"><span class="tile claude" data-logo="claude"></span><h2>Claude Code</h2><span class="status"></span></div>
+    <div class="actions" data-when="connected">
+      <button class="btn quiet small" data-reconnect>Sign in again</button>
+      <button class="btn quiet small danger" data-unlink="claude">Disconnect</button>
+    </div>
+    <div data-when="flow">
+      <button class="btn" data-step="claude-start">Sign in with Claude</button>
+      <p>Approve, then paste the code Claude shows you.</p>
+      <input id="claudeCode" autocomplete="off" placeholder="Paste code" aria-label="Claude sign-in code">
+      <button class="btn quiet" data-step="claude-finish">Connect</button>
+    </div>
+  </div>
+  <div class="panel" data-provider="codex">
+    <div class="panel-head"><span class="tile codex" data-logo="codex"></span><h2>Codex</h2><span class="status"></span></div>
+    <div class="actions" data-when="connected">
+      <button class="btn quiet small" data-reconnect>Sign in again</button>
+      <button class="btn quiet small danger" data-unlink="codex">Disconnect</button>
+    </div>
+    <div data-when="flow">
+      <button class="btn" data-step="codex-start">Sign in with ChatGPT</button>
+      <div id="codexWait" hidden>
+        <p>Enter this code at <a id="codexUrl" target="_blank" rel="noopener">auth.openai.com/codex/device</a></p>
+        <div class="devcode" id="codexCode"></div>
+        <p id="codexState">Waiting for approval…</p>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><span class="tile"><img src="/icon-192.png" alt=""></span><h2>Widget</h2></div>
+    <p>1. Copy the script and paste it into a new script in the Scriptable app named <b>Pacedex</b>.</p>
+    <button class="btn quiet" data-step="widget-copy">Copy script</button>
+    <p>2. Connect it, then add a medium Scriptable widget to your Home Screen and pick Pacedex.</p>
+    <a class="btn" id="widgetConnect">Connect widget</a>
+  </div>
+  <div class="panel" id="notify">
+    <div class="panel-head"><span class="tile plain" data-icon="bell"></span><h2>Notifications</h2><span class="status"></span></div>
+    <p data-n="unsupported">To get notifications, add Pacedex to your Home Screen and open it from there.</p>
+    <p data-n="denied">Notifications are blocked for Pacedex. Allow them in the Settings app under Notifications, then Pacedex.</p>
+    <div data-n="off">
+      <p>Each service gets its own alerts, sent only in the morning or evening.</p>
+      <button class="btn" data-step="notify-on">Turn on notifications</button>
+    </div>
+    <div data-n="on">
+      <div class="switches">
+        <label class="switch"><span><span>Running out early<small>On pace to hit the limit a day or more before it resets</small></span></span><input type="checkbox" data-pref="ahead"></label>
+        <label class="switch"><span><span>Falling behind<small>Half the week gone, with under half the usual share used</small></span></span><input type="checkbox" data-pref="behind"></label>
+        <label class="switch"><span><span>Something's wrong<small>Sign-in expired, or no updates for 6 hours</small></span></span><input type="checkbox" data-pref="broken"></label>
+        <label class="switch"><span><span>Weekly summary<small>The evening or morning before each service resets</small></span></span><input type="checkbox" data-pref="recap"></label>
+      </div>
+      <div class="switches">
+        <label class="switch"><span data-logo="claude">Claude Code</span><input type="checkbox" data-pref="services.claude"></label>
+        <label class="switch"><span data-logo="codex">Codex</span><input type="checkbox" data-pref="services.codex"></label>
+      </div>
+      <p class="fine">Sent between 8 and 10 AM or 6 and 9 PM. Each alert goes out at most once per service per week, and something's-wrong alerts once per problem.</p>
+      <div class="actions">
+        <button class="btn quiet small" data-step="notify-test">Send test</button>
+        <button class="btn quiet small danger" data-step="notify-off">Turn off</button>
+      </div>
+    </div>
+  </div>
+  <button class="textbtn" id="forgetKey">Forget access key on this phone</button>
+</section>
+
+<script>
+// Icons: Lucide (ISC). Brand marks: LobeHub icons (MIT).
+const ICONS = {
+  settings: '<path d="M14 17H5"/><path d="M19 7h-9"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+};
+const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+const LOGOS = {
+  claude: () => `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#D97757" fill-rule="evenodd" clip-rule="evenodd" d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z"/></svg>`,
+  codex: (id) => `<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="12" x2="12" y1="0" y2="24"><stop stop-color="#B1A7FF"/><stop offset=".5" stop-color="#7A9DFF"/><stop offset="1" stop-color="#3941FF"/></linearGradient></defs><path fill="url(#${id})" fill-rule="evenodd" clip-rule="evenodd" d="M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z"/></svg>`,
+};
+// staleMin is how long readings may go without updating before the meter says
+// so: well past the Worker's schedule (and, for Codex, its backup trigger), so
+// a single failed check never shows up.
+// Ring colours: the fill runs deep to bright along the arc; line is the
+// outline of time to come, UNUSED (shared) the time gone without use, and dim
+// the empty ring when the week's position is unknown.
+// The widget uses the same values.
+const PROVIDERS = [
+  { id: "claude", name: "Claude Code", aura: "var(--claude)", staleMin: 60,
+    stops: ["#A8482C", "#D97757", "#F2A27F"], dim: "#3A221A", line: "#8A4A34" },
+  { id: "codex", name: "Codex", aura: "var(--codex-b)", staleMin: 120,
+    stops: ["#3941FF", "#7A9DFF", "#B1A7FF"], dim: "#232B4A", line: "#5466B0" },
+];
+const UNUSED = "#3A3A3C";
+const R = 84, W = 16, C = 2 * Math.PI * R;
+const WEEK = 7 * 864e5;
+
+const $ = (s) => document.querySelector(s);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+let snapshot = null;
+let firstPaint = true;
+const reconnecting = new Set();
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${store.get("key") || ""}` },
+  });
+  if (res.status === 401) { store.del("key"); show("key"); throw new Error("That access key didn't work. Enter it again."); }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function show(v) {
+  $("#keyView").classList.toggle("open", v === "key");
+  $("#meters").classList.toggle("open", v === "meters");
+  $("#settings").hidden = v === "key";
+  if (v === "key") openSheet(false);
+}
+
+function openSheet(open) {
+  document.body.classList.toggle("sheet-open", open);
+  $("#sheet").inert = !open;
+  if (open) { renderSettings(); prepWidget(); prepNotify(); }
+  else reconnecting.clear();
+}
+
+// The widget gets its own read-only key and this Worker's address, handed to
+// Scriptable through its URL scheme so neither has to be typed or copied.
+async function prepWidget() {
+  if ($("#widgetConnect").href) return;
+  try {
+    const { key } = await api("/api/widget-key");
+    if (key) $("#widgetConnect").href = `scriptable:///run/Pacedex?key=${encodeURIComponent(key)}&base=${encodeURIComponent(location.origin)}`;
+  } catch {}
+}
+
+// ---- notifications ----
+// The Worker decides what to send and when; this only subscribes the phone
+// and keeps the switches.
+const pushOK = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+let notifyState = null; // { publicKey, prefs, subscribed }
+
+// The phone's zone and clock style, so messages read "Resets Sat at 9 AM" in local time.
+function fmtInfo() {
+  const ro = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions();
+  return { tz: Intl.DateTimeFormat().resolvedOptions().timeZone, hour12: ro.hour12 ?? /h1[12]/.test(ro.hourCycle || "") };
+}
+
+async function currentSub() {
+  return (await navigator.serviceWorker.ready).pushManager.getSubscription();
+}
+
+async function prepNotify() {
+  if (!pushOK) return renderNotify("unsupported");
+  if (Notification.permission === "denied") return renderNotify("denied");
+  try {
+    const sub = await currentSub();
+    notifyState = await api("/api/notify/status", { method: "POST", body: JSON.stringify({ endpoint: sub?.endpoint }) });
+    // The Worker drops a subscription the push service has expired; a phone
+    // that still holds one quietly registers it again.
+    if (sub && Notification.permission === "granted" && !notifyState.subscribed) {
+      Object.assign(notifyState, await api("/api/notify/subscribe", { method: "POST", body: JSON.stringify({ subscription: sub.toJSON(), ...fmtInfo() }) }));
+    }
+    renderNotify(sub && notifyState.subscribed ? "on" : "off");
+  } catch { renderNotify("off"); }
+}
+
+function renderNotify(mode) {
+  const panel = $("#notify");
+  panel.querySelectorAll("[data-n]").forEach((el) => { el.hidden = el.dataset.n !== mode; });
+  const status = panel.querySelector(".status");
+  status.className = `status ${mode === "on" ? "ok" : ""}`;
+  status.innerHTML = mode === "on" ? `${icon("check")}On` : mode === "off" ? "Off" : "";
+  const prefs = notifyState?.prefs;
+  if (prefs) panel.querySelectorAll("[data-pref]").forEach((el) => {
+    const [k, s] = el.dataset.pref.split(".");
+    el.checked = s ? !!prefs[k]?.[s] : !!prefs[k];
+  });
+}
+
+// Every change sends all the switches, so two quick taps can't undo each other.
+function prefsFromSwitches() {
+  const prefs = { services: {} };
+  $("#notify").querySelectorAll("[data-pref]").forEach((el) => {
+    const [k, s] = el.dataset.pref.split(".");
+    if (s) prefs[k][s] = el.checked; else prefs[k] = el.checked;
+  });
+  return prefs;
+}
+
+document.addEventListener("change", async (ev) => {
+  const t = ev.target.closest("[data-pref]");
+  if (!t) return;
+  try {
+    const r = await api("/api/notify/prefs", { method: "POST", body: JSON.stringify({ prefs: prefsFromSwitches(), ...fmtInfo() }) });
+    notifyState = { ...notifyState, prefs: r.prefs };
+  } catch (e) { t.checked = !t.checked; alert(e.message); }
+});
+
+const keyBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+// Compact durations, social-feed style: 8m, 3h, 2d 4h.
+function short(ms) {
+  const m = Math.max(0, Math.round(ms / 6e4)), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (d) return h % 24 ? `${d}d ${h % 24}h` : `${d}d`;
+  if (h) return m % 60 ? `${h}h ${m % 60}m` : `${h}h`;
+  return m < 1 ? "now" : `${m}m`;
+}
+
+// The relay's schedule, "7,37 * * * *" in codex-usage.yml, is in UTC. Stepping
+// through UTC minutes keeps it right in half-hour zones like India's too.
+function nextRelayRun(now = new Date()) {
+  const t = new Date(now);
+  t.setUTCSeconds(0, 0);
+  do t.setUTCMinutes(t.getUTCMinutes() + 1); while (t.getUTCMinutes() % 30 !== 7);
+  return t;
+}
+
+const pt = (t, r) => { const a = 2 * Math.PI * t - Math.PI / 2; return `${(100 + r * Math.cos(a)).toFixed(2)} ${(100 + r * Math.sin(a)).toFixed(2)}`; };
+const arc = (t0, t1, r) => `M${pt(t0, r)} A${r} ${r} 0 ${t1 - t0 > 0.5 ? 1 : 0} 1 ${pt(t1, r)}`;
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+function colorAt(stops, t) {
+  const n = stops.length - 1, x = Math.min(1, Math.max(0, t)) * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
+  const a = hexRgb(stops[i]), b = hexRgb(stops[i + 1]);
+  return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(",")})`;
+}
+
+// The ring is this service's week: seven days from its own reset, starting at
+// 12 o'clock. Time gone is solid and time to come is hollow, with a white
+// capsule at now where one meets the other, part way through today; the day
+// gaps let the days left before the reset be counted. Usage fills over all of
+// it, deep at the start and bright at the head; past the capsule, it is ahead
+// of time. Time gone but not used is grey, so colour only ever means usage.
+function weekRing(p, used, resetAt) {
+  const f = Math.min(100, used ?? 0) / 100;
+  const now = resetAt ? Math.min(1, Math.max(0, 1 - (resetAt - Date.now()) / WEEK)) : null;
+  const today = now == null ? -1 : Math.min(6, Math.floor(now * 7));
+  let track = "", fill = "", tick = "";
+  const stroke = (d, color, w) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}"/>`;
+  // One stretch of ring: its empty track (grey, or the service's dim when the
+  // week's position is unknown), then whatever part of the fill lies on it.
+  const band = (a, b, w, empty = true) => {
+    if (empty) track += stroke(arc(a, b, R), now == null ? p.dim : UNUSED, w);
+    if (f <= a) return;
+    const e = Math.min(b, f), n = Math.ceil((e - a) * 240) + 1;
+    for (let i = 0; i < n; i++) {
+      const t0 = a + ((e - a) * i) / n, t1 = Math.min(e, a + ((e - a) * (i + 1)) / n + 0.002);
+      fill += stroke(arc(t0, t1, R), colorAt(p.stops, (t0 + t1) / 2 / f), w);
+    }
+  };
+  // Time to come: an outline, with any usage drawn narrower inside it.
+  const hollow = (a, b) => {
+    const o = R + W / 2 - 1, i = R - W / 2 + 1;
+    track += `<path d="${arc(a, b, o)} L${pt(b, i)} A${i} ${i} 0 0 0 ${pt(a, i)} Z" fill="none" stroke="${p.line}" stroke-width="2" stroke-linejoin="round"/>`;
+    band(a, b, W - 4, false);
+  };
+  for (let d = 0; d < 7; d++) {
+    const a = d / 7 + 0.007, b = (d + 1) / 7 - 0.007;
+    if (today >= 0 && d > today) hollow(a, b);
+    else if (d === today && now < b) {
+      if (now > a) band(a, now, W);
+      hollow(Math.max(a, now), b);
+    } else band(a, b, W);
+  }
+  // The capsule: a white bar across the ring at now, in a black halo.
+  if (now != null) {
+    const u = W / 9, cap = (o, w, color) => `<path d="M${pt(now, R - W / 2 - o)} L${pt(now, R + W / 2 + o)}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+    tick = cap(1.2 * u, 6.4 * u, "#000") + cap(0.6 * u, 3 * u, "#F5F5F7");
+  }
+  return { track, fill, tick };
+}
+
+// The fill sweeps in from 12 o'clock on first paint, through a mask.
+function ring(p, used, logo, resetAt, when) {
+  const { track, fill, tick } = weekRing(p, used, resetAt);
+  return `<div class="ring" style="--aura:${p.aura}">
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <mask id="sweep-${p.id}" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
+        <circle class="fill" data-len="${C + 1}" cx="100" cy="100" r="${R}" fill="none" stroke="#fff" stroke-width="40"
+          transform="rotate(-90 100 100)" stroke-dasharray="${firstPaint ? 0 : C + 1} ${C + 1}"/></mask>
+      ${track}<g mask="url(#sweep-${p.id})">${fill}</g>${tick}
+    </svg>
+    <div class="inside">${logo}${used == null ? "" : `<div class="pct">${used}<small>%</small></div>`}${when || ""}</div>
+  </div>`;
+}
+
+// The 5-hour window as a bar under the ring, in the ring's own terms: five
+// hour segments, solid gone and hollow to come, usage in the gradient, grey
+// for time gone unused, the capsule at now.
+const BAR = { L: 220, H: 8, Y: 5, GAP: 3 }, SESSION = 5 * 36e5;
+function sessionBar(p, used, resetAt) {
+  const { L, H, Y, GAP } = BAR, f = Math.min(100, used ?? 0) / 100, fx = f * L;
+  const now = resetAt ? Math.min(1, Math.max(0, 1 - (resetAt - Date.now()) / SESSION)) * L : null;
+  const g = `url(#bar-${p.id})`;
+  let out = `<defs><linearGradient id="bar-${p.id}" gradientUnits="userSpaceOnUse" x1="0" x2="${Math.max(fx, 1)}">${
+    p.stops.map((c, i) => `<stop offset="${i / (p.stops.length - 1)}" stop-color="${c}"/>`).join("")}</linearGradient></defs>`;
+  const rect = (a, b, y, h, attrs) => b > a ? `<rect x="${a.toFixed(2)}" y="${y}" width="${(b - a).toFixed(2)}" height="${h}" ${attrs}/>` : "";
+  const solid = (a, b) => rect(a, b, Y, H, `fill="${now == null ? p.dim : UNUSED}"`) + rect(a, Math.min(b, fx), Y, H, `fill="${g}"`);
+  const hollow = (a, b) => rect(a + 0.75, b - 0.75, Y + 0.75, H - 1.5, `fill="none" stroke="${p.line}" stroke-width="1.5"`)
+    + rect(a, Math.min(b, fx), Y + 1.5, H - 3, `fill="${g}"`);
+  for (let h = 0; h < 5; h++) {
+    const a = (h * L) / 5 + (h ? GAP / 2 : 0), b = ((h + 1) * L) / 5 - (h < 4 ? GAP / 2 : 0);
+    if (now == null || b <= now) out += solid(a, b);
+    else if (a >= now) out += hollow(a, b);
+    else out += solid(a, now) + hollow(now, b);
+  }
+  if (now != null) {
+    const u = H / 9, cap = (o, w, color) => `<path d="M${now.toFixed(2)} ${Y - o} V${Y + H + o}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+    out += cap(1.2 * u, 6.4 * u, "#000") + cap(0.6 * u, 3 * u, "#F5F5F7");
+  }
+  return `<div class="session">
+    <svg viewBox="0 0 ${L} ${H + 2 * Y}" aria-hidden="true">${out}</svg>
+    <div><span><b>${used ?? 0}%</b> 5-hour</span><span>${resetAt ? `resets in ${short(resetAt - Date.now())}` : "not started"}</span></div>
+  </div>`;
+}
+
+function meterHtml(prov) {
+  const p = snapshot?.[prov.id] || {};
+  const logo = prov.id === "codex" ? LOGOS.codex("cxMark") : LOGOS.claude();
+  if (!p.linked) {
+    return `<article class="meter" aria-label="${prov.name}: not connected">${ring(prov, null, logo)}
+      <button class="btn small quiet" onclick="openSheet(true)">Connect ${prov.name}</button></article>`;
+  }
+  const w = p.weekly;
+  const used = w ? Math.floor(w.used_percent) : null;
+  const resetAt = w?.resets_at ? new Date(w.resets_at) : null;
+  const age = p.fetched_at ? Date.now() - p.fetched_at : null;
+
+  let alert = "";
+  if (p.needs_relink) alert = `<button class="alert" onclick="openSheet(true)">Sign-in expired, reconnect</button>`;
+  else if (age == null) alert = `<span class="alert">${prov.id === "codex"
+    ? `First update expected around ${nextRelayRun().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+    : "Waiting for first update"}</span>`;
+  else if (age > prov.staleMin * 6e4) alert = `<span class="alert">Not updated for ${short(age)}</span>`;
+
+  const s = p.session;
+  const sUsed = s ? Math.floor(s.used_percent) : null;
+  const sReset = s?.resets_at ? new Date(s.resets_at) : null;
+  const label = `${prov.name}: ${used ?? "unknown"}% of weekly limit used${resetAt ? `, resets in ${short(resetAt - Date.now())}` : ""}`
+    + (s ? `. ${sUsed}% of 5-hour limit used${sReset ? `, resets in ${short(sReset - Date.now())}` : ""}` : "");
+  const when = resetAt && `<div class="when"><b>${short(resetAt - Date.now())}</b>
+    <span>${resetAt.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}</span></div>`;
+  return `<article class="meter" aria-label="${label}" ${resetAt ? "data-reset" : ""}>
+    ${ring(prov, used, logo, resetAt, when)}
+    ${s ? sessionBar(prov, sUsed, sReset) : ""}
+    ${alert}
+  </article>`;
+}
+
+function render() {
+  if (!snapshot) return;
+  $("#meters").innerHTML = PROVIDERS.map(meterHtml).join("");
+  if (firstPaint) {
+    firstPaint = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.querySelectorAll(".ring .fill").forEach((el) => el.setAttribute("stroke-dasharray", `${el.dataset.len} ${C}`));
+    }));
+  }
+}
+
+document.addEventListener("click", (ev) => {
+  const m = ev.target.closest(".ring")?.closest(".meter[data-reset]");
+  if (!m) return;
+  clearTimeout(m.flipTimer);
+  m.classList.toggle("flip");
+  if (m.classList.contains("flip")) m.flipTimer = setTimeout(() => m.classList.remove("flip"), 4000);
+});
+
+function renderSettings() {
+  document.querySelectorAll(".tile[data-logo]").forEach((el) => {
+    el.innerHTML = el.dataset.logo === "codex" ? LOGOS.codex("cxSet") : LOGOS.claude();
+  });
+  // The switch rows keep their label; the logo goes in front of it.
+  document.querySelectorAll(".switch [data-logo]").forEach((el) => {
+    if (!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin", el.dataset.logo === "codex" ? LOGOS.codex("cxSw") : LOGOS.claude());
+  });
+  for (const { id } of PROVIDERS) {
+    const p = snapshot?.[id];
+    const panel = $(`[data-provider="${id}"]`);
+    const ok = p?.linked && !p.needs_relink;
+    const status = panel.querySelector(".status");
+    status.className = `status ${ok ? "ok" : p?.needs_relink ? "bad" : ""}`;
+    status.innerHTML = ok ? `${icon("check")}Connected` : p?.needs_relink ? "Expired" : "Not connected";
+    panel.querySelector('[data-when="connected"]').hidden = !ok;
+    panel.querySelector('[data-when="flow"]').hidden = ok && !reconnecting.has(id);
+  }
+}
+
+// Reads the Worker's saved snapshot; it never asks Claude or Codex directly.
+// A failed read keeps the last snapshot, whose ages show how old it is.
+async function load() {
+  try {
+    snapshot = await api("/api/usage");
+    store.set("snapshot", JSON.stringify(snapshot));
+  } catch {}
+  render();
+  if (document.body.classList.contains("sheet-open")) renderSettings();
+}
+
+// ---- connecting ----
+let codexTimer = null;
+document.addEventListener("click", async (ev) => {
+  const t = ev.target.closest("[data-step],[data-unlink],[data-reconnect]");
+  if (!t) return;
+  const step = t.dataset.step, unlink = t.dataset.unlink;
+  try {
+    if (t.hasAttribute("data-reconnect")) {
+      reconnecting.add(t.closest("[data-provider]").dataset.provider);
+      renderSettings();
+    } else if (step === "claude-start") {
+      const tab = window.open("about:blank", "_blank");
+      const { url } = await api("/api/claude/start", { method: "POST" });
+      if (tab) tab.location = url; else location.href = url;
+    } else if (step === "claude-finish") {
+      await api("/api/claude/finish", { method: "POST", body: JSON.stringify({ code: $("#claudeCode").value }) });
+      $("#claudeCode").value = "";
+      openSheet(false); load();
+    } else if (step === "codex-start") {
+      const r = await api("/api/codex/start", { method: "POST" });
+      $("#codexCode").textContent = r.user_code;
+      $("#codexUrl").href = r.verification_url;
+      $("#codexWait").hidden = false;
+      clearInterval(codexTimer);
+      codexTimer = setInterval(pollCodex, Math.max(5, r.interval) * 1000);
+    } else if (step === "widget-copy") {
+      // Safari only allows a clipboard write inside the tap, so the fetch is
+      // handed to the clipboard as a pending item rather than awaited first.
+      const text = fetch("/widget/pacedex.js", { cache: "no-store" }).then((r) => r.text());
+      if (window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({ "text/plain": text.then((s) => new Blob([s], { type: "text/plain" })) })]);
+      } else await navigator.clipboard.writeText(await text);
+      t.textContent = "Copied";
+    } else if (step === "notify-on") {
+      // iOS only asks from inside a tap, so this must come before any other await.
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") return renderNotify(perm === "denied" ? "denied" : "off");
+      const key = notifyState?.publicKey || (await api("/api/notify/status", { method: "POST", body: "{}" })).publicKey;
+      if (!key) throw new Error("Notifications aren't set up on the server yet.");
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription())
+        || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) }));
+      notifyState = { ...notifyState, publicKey: key,
+        ...(await api("/api/notify/subscribe", { method: "POST", body: JSON.stringify({ subscription: sub.toJSON(), ...fmtInfo() }) })) };
+      renderNotify("on");
+    } else if (step === "notify-off") {
+      const sub = await currentSub();
+      await api("/api/notify/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint: sub?.endpoint }) });
+      await sub?.unsubscribe();
+      renderNotify("off");
+    } else if (step === "notify-test") {
+      const sub = await currentSub();
+      t.disabled = true;
+      await api("/api/notify/test", { method: "POST", body: JSON.stringify({ endpoint: sub?.endpoint, ...fmtInfo() }) }).finally(() => { t.disabled = false; });
+      t.textContent = "Sent";
+      setTimeout(() => { t.textContent = "Send test"; }, 3000);
+    } else if (unlink) {
+      if (!confirm(`Disconnect ${unlink === "claude" ? "Claude Code" : "Codex"}? Its meter stops updating until you connect it again.`)) return;
+      await api("/api/unlink", { method: "POST", body: JSON.stringify({ provider: unlink }) });
+      await load();
+    }
+  } catch (e) { alert(e.message); }
+});
+
+async function pollCodex() {
+  try {
+    const r = await api("/api/codex/poll", { method: "POST" });
+    if (r.status === "linked") {
+      clearInterval(codexTimer);
+      $("#codexWait").hidden = true;
+      openSheet(false); load();
+    }
+  } catch (e) { clearInterval(codexTimer); $("#codexState").textContent = e.message; }
+}
+
+$("#settings").innerHTML = icon("settings");
+$("#sheetClose").innerHTML = icon("close");
+document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
+$("#settings").onclick = () => openSheet(true);
+$("#sheetClose").onclick = $("#scrim").onclick = () => openSheet(false);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") openSheet(false); });
+$("#keySave").onclick = () => { store.set("key", $("#keyInput").value.trim()); show("meters"); load(); };
+$("#forgetKey").onclick = () => { store.del("key"); store.del("snapshot"); show("key"); };
+// While the app is on screen it re-reads the snapshot every minute, so the
+// numbers keep up with the Worker's schedule without any tapping.
+document.addEventListener("visibilitychange", () => { if (!document.hidden && store.get("key")) load(); });
+setInterval(() => { if (!document.hidden && store.get("key")) load(); }, 60000);
+
+// Opening /#key=... saves the key so it doesn't have to be typed.
+const fragKey = new URLSearchParams(location.hash.slice(1)).get("key");
+if (fragKey) { store.set("key", fragKey); history.replaceState(null, "", "/"); }
+try { snapshot = JSON.parse(store.get("snapshot")); } catch {}
+if (store.get("key")) { show("meters"); render(); load(); } else show("key");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
+</script>
+</body>
+</html>

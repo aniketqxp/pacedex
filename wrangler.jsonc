@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pacedex",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  // No id: Wrangler creates the namespace on the first deploy and remembers it.
+  "kv_namespaces": [{ "binding": "USAGE" }],
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "observability": { "enabled": true }
+  // Everything else is a secret, set by `npm run setup`:
+  //   APP_KEY            the app's access key
+  //   WIDGET_KEY         read-only key for the widget (GET /api/usage only)
+  //   RELAY_KEY          the GitHub Actions relay's key (/api/relay/* only)
+  //   ENC_KEY            base64 32-byte AES-GCM key for the stored sign-ins
+  //   VAPID_PRIVATE_JWK  P-256 private key that signs Web Push requests
+  //   VAPID_SUBJECT      this Worker's URL, sent to Apple with each push
+  // Optional, for the stale-Codex watchdog (see README):
+  //   GH_TOKEN, GH_REPO
+}
